@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        Int        @id @default(autoincrement())
+  name      String
+  email     String     @unique
+  password  String
+  createdAt DateTime   @default(now())
+  businesses Business[]
+}
+
+model Business {
+  id        Int      @id @default(autoincrement())
+  name      String
+  slug      String   @unique
+  city      String?
+  zipCode   String?
+  status    String   @default("active")
+  companyId Int
+  company   Company  @relation(fields: [companyId], references: [id])
+  createdAt DateTime @default(now())
+  wheels    Wheel[]
+}
+
+model Wheel {
+  id               Int       @id @default(autoincrement())
+  name             String
+  googleReviewUrl  String?
+  codeSecret       String    @default("")
+  businessId       Int
+  business         Business  @relation(fields: [businessId], references: [id])
+  createdAt        DateTime  @default(now())
+  rewards          Reward[]
+  scans            Scan[]
+}
+model Reward {
+  id          Int      @id @default(autoincrement())
+  label       String
+  probability Float
+  color       String   @default("#8B5CF6")
+  emoji       String   @default("🎁")
+  isLosing    Boolean  @default(false)
+  wheelId     Int
+  wheel       Wheel    @relation(fields: [wheelId], references: [id])
+}
+model Scan {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  ip        String
+  hasSpun   Boolean  @default(false)
+  dailyCode Int?
+  wonAt     DateTime?
+  rewardId  Int?
+  wheelId   Int
+  wheel     Wheel    @relation(fields: [wheelId], references: [id])
+  createdAt DateTime @default(now())
+}

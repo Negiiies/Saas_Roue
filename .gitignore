@@ -1,0 +1,16 @@
+Crée un fichier `.gitignore` à la racine :
+```
+# Dependencies
+front/node_modules
+back/node_modules
+
+# Environment
+back/.env
+front/.env
+front/.env.local
+
+# Build
+front/.next
+
+# Database
+back/prisma/dev.db
