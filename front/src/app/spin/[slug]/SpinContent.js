@@ -118,8 +118,9 @@ export default function SpinContent({ slug }) {
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState(null)
   const [hasReviewed, setHasReviewed] = useState(false)
+  const [wheelId, setWheelId] = useState(null)
 
-  const storageKey = `spinned_wheel_${slug}`
+  const storageKey = wheelId ? `spinned_wheel_${slug}_${wheelId}` : null
 
   // ─── Dessiner la roue (appelé dès que canvas + wheel sont dispo) ────────────
   const drawWheel = useCallback(() => {
@@ -143,8 +144,10 @@ export default function SpinContent({ slug }) {
     const params = new URLSearchParams(window.location.search)
     const wId = params.get('wheel')
     if (!wId) { setStep('error'); return }
+    setWheelId(wId)
 
-    const cached = localStorage.getItem(storageKey)
+    const key = `spinned_wheel_${slug}_${wId}`
+    const cached = localStorage.getItem(key)
     if (cached) {
       try {
         const data = JSON.parse(cached)
@@ -167,7 +170,7 @@ export default function SpinContent({ slug }) {
           const s = res.data.existingScan
           const data = { reward: s.reward, secretCode: s.secretCode, status: s.status }
           setResult(data)
-          localStorage.setItem(storageKey, JSON.stringify(data))
+          localStorage.setItem(key, JSON.stringify(data))
           setStep('already')
         } else {
           setStep('ready') // ← affiche la roue directement
