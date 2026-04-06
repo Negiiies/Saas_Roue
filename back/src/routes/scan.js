@@ -122,8 +122,7 @@ router.post('/spin', async (req, res) => {
     }
 
     const wonAt = new Date()
-    const expiresAt = new Date()
-    expiresAt.setHours(23, 59, 59, 999)
+    const expiresAt = new Date(wonAt.getTime() + 24 * 60 * 60 * 1000)
 
     let secretCode = null
     let status = 'lost'

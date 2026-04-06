@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import axios from 'axios'
 import { QRCodeSVG } from 'qrcode.react'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API = ''
 
 // ─── Fingerprint ──────────────────────────────────────────────────────────────
 function getFingerprint() {
@@ -295,7 +295,7 @@ export default function SpinContent({ slug }) {
           <QRCodeSVG value={res.secretCode || ''} size={160} bgColor="#ffffff" fgColor="#1a0533" level="H" />
         </div>
         <p className="text-violet-400 font-mono font-bold text-lg tracking-widest">{res.secretCode}</p>
-        <p className="text-gray-500 text-xs mt-2">Valable jusqu'à minuit aujourd'hui</p>
+        <p className="text-gray-500 text-xs mt-2">Valable 24h après obtention</p>
       </div>
       <p className="text-gray-500 text-sm">Le personnel scannera votre QR code pour valider la récompense</p>
     </div>

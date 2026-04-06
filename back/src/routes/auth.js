@@ -18,6 +18,11 @@ router.post('/login', loginRules, async (req, res) => {
   const { email, password } = req.body
 
   try {
+    // Admin unique — seul l'email autorisé peut se connecter
+    if (process.env.ADMIN_EMAIL && email !== process.env.ADMIN_EMAIL) {
+      return res.status(401).json({ error: 'Identifiants incorrects' })
+    }
+
     const company = await prisma.company.findUnique({ where: { email } })
     if (!company) return res.status(401).json({ error: 'Identifiants incorrects' })
 
