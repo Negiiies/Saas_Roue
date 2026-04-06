@@ -8,15 +8,13 @@ const API = ''
 
 // ─── Fingerprint ──────────────────────────────────────────────────────────────
 function getFingerprint() {
-  return btoa([
-    navigator.userAgent,
-    navigator.language,
-    screen.width + 'x' + screen.height,
-    screen.colorDepth,
-    Intl.DateTimeFormat().resolvedOptions().timeZone,
-    navigator.hardwareConcurrency || '',
-    navigator.platform || ''
-  ].join('|')).slice(0, 64)
+  const key = 'spin_device_id'
+  let id = localStorage.getItem(key)
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem(key, id)
+  }
+  return id
 }
 
 // ─── Étoiles ──────────────────────────────────────────────────────────────────

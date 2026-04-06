@@ -33,7 +33,7 @@ export default function LandingPage() {
       <nav className="relative z-10 flex items-center justify-between px-6 md:px-16 py-6">
         <div className="flex items-center gap-2">
           <span className="text-2xl">🎡</span>
-          <span className="text-xl font-bold">SpinReview</span>
+          <span className="text-xl font-bold">Ryturn</span>
         </div>
         <a href="mailto:contact@rytual.fr"
           className="text-sm text-gray-400 hover:text-white transition hidden sm:block">
@@ -113,7 +113,7 @@ export default function LandingPage() {
 
       {/* Avantages */}
       <section className="relative z-10 px-6 md:px-16 py-24">
-        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">Pourquoi SpinReview ?</h2>
+        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">Pourquoi Ryturn ?</h2>
         <p className="text-gray-400 text-center mb-16 max-w-lg mx-auto">Tout ce dont vous avez besoin pour booster vos avis</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -157,7 +157,7 @@ export default function LandingPage() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 max-w-4xl mx-auto">
           <div className="flex items-center gap-2">
             <span>🎡</span>
-            <span className="font-bold">SpinReview</span>
+            <span className="font-bold">Ryturn</span>
             <span className="text-gray-600 text-sm ml-2">&copy; {new Date().getFullYear()}</span>
           </div>
           <div className="flex gap-6 text-sm text-gray-500">
