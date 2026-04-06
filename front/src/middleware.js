@@ -1,33 +1,25 @@
 import { NextResponse } from 'next/server'
 
-// Domaine admin (Vercel par défaut + futur custom)
-const ADMIN_HOSTS = [
-  'saas-roue.vercel.app',
-  'saas-roue-lxl6iznvb-negiies-projects.vercel.app',
-  'localhost',
-]
+// Domaine client
+const CLIENT_HOSTS = ['ryturn.fr', 'www.ryturn.fr']
 
-// Pages autorisées sur le domaine client (spinreview.fr)
+// Pages autorisées sur le domaine client
 const CLIENT_PAGES = ['/spin', '/validate', '/mentions-legales']
-
-// Pages autorisées sur le domaine admin
-const ADMIN_PAGES = ['/login', '/dashboard', '/api']
 
 export function middleware(request) {
   const { pathname, hostname } = request.nextUrl
 
-  const isAdmin = ADMIN_HOSTS.some(h => hostname.includes(h))
+  const isClient = CLIENT_HOSTS.some(h => hostname.includes(h))
 
-  if (isAdmin) {
-    // Sur le domaine admin : la racine redirige vers /login
+  if (!isClient) {
+    // Domaine admin (saas-roue.vercel.app) : la racine redirige vers /login
     if (pathname === '/') {
       return NextResponse.redirect(new URL('/login', request.url))
     }
-    // Bloquer l'accès aux pages client depuis l'admin (optionnel)
     return NextResponse.next()
   }
 
-  // Domaine client (spinreview.fr ou autre)
+  // Domaine client (ryturn.fr)
   // La racine affiche la landing page
   if (pathname === '/') {
     return NextResponse.next()
