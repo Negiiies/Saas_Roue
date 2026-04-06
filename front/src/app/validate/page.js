@@ -43,22 +43,25 @@ export default function ValidatePage() {
         videoRef.current.srcObject = stream
         videoRef.current.play()
       }
-      if ('BarcodeDetector' in window) {
-        const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-        const interval = setInterval(async () => {
-          if (!videoRef.current) return
-          try {
-            const barcodes = await detector.detect(videoRef.current)
-            if (barcodes.length > 0) {
-              const scannedCode = barcodes[0].rawValue
-              clearInterval(interval)
-              stopScanner()
-              setCode(scannedCode)
-              handleValidate(scannedCode)
-            }
-          } catch (_) {}
-        }, 500)
+      if (!('BarcodeDetector' in window)) {
+        stopScanner()
+        setResult({ valid: false, error: "Scan non supporté sur ce navigateur. Utilisez Chrome ou saisissez le code manuellement." })
+        return
       }
+      const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+      const interval = setInterval(async () => {
+        if (!videoRef.current) return
+        try {
+          const barcodes = await detector.detect(videoRef.current)
+          if (barcodes.length > 0) {
+            const scannedCode = barcodes[0].rawValue
+            clearInterval(interval)
+            stopScanner()
+            setCode(scannedCode)
+            handleValidate(scannedCode)
+          }
+        } catch (_) {}
+      }, 500)
     } catch (err) {
       setScanning(false)
       setResult({ valid: false, error: "Impossible d'accéder à la caméra (HTTPS requis)" })
@@ -384,7 +387,7 @@ export default function ValidatePage() {
           }} />
         ))}
 
-        <div className="card" style={{ paddingBottom: '8px' }}>
+        <div className="card" style={{ paddingBottom: '40px' }}>
           <div className="icon-orb">
             <div className="icon-orb-glow" />
             <div className="icon-orb-ring" />
@@ -476,7 +479,7 @@ export default function ValidatePage() {
           )}
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: '24px' }}>
+        <p style={{ position: 'fixed', bottom: '16px', left: 0, right: 0, textAlign: 'center', zIndex: 20 }}>
           <a href="/mentions-legales" style={{ fontSize: '12px', color: 'rgba(140,100,180,0.4)', textDecoration: 'none', transition: 'color 0.2s' }}
             onMouseEnter={e => e.target.style.color = 'rgba(180,140,220,0.7)'}
             onMouseLeave={e => e.target.style.color = 'rgba(140,100,180,0.4)'}>
