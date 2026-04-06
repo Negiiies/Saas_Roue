@@ -1,217 +1,234 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import axios from 'axios'
+import { QRCodeSVG } from 'qrcode.react'
 
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+// ─── Fingerprint ──────────────────────────────────────────────────────────────
+function getFingerprint() {
+  return btoa([
+    navigator.userAgent,
+    navigator.language,
+    screen.width + 'x' + screen.height,
+    screen.colorDepth,
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+    navigator.hardwareConcurrency || '',
+    navigator.platform || ''
+  ].join('|')).slice(0, 64)
+}
+
+// ─── Étoiles ──────────────────────────────────────────────────────────────────
 function StarBackground() {
-  const canvasRef = useRef(null)
-
+  const [stars, setStars] = useState([])
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-
-    const stars = Array.from({ length: 120 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      r: Math.random() * 1.5 + 0.3,
-      alpha: Math.random(),
-      speed: Math.random() * 0.008 + 0.003,
-      dir: Math.random() > 0.5 ? 1 : -1
-    }))
-
-    let animId
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      stars.forEach(s => {
-        s.alpha += s.speed * s.dir
-        if (s.alpha >= 1 || s.alpha <= 0) s.dir *= -1
-        ctx.beginPath()
-        ctx.arc(s.x, s.y, s.r, 0, 2 * Math.PI)
-        ctx.fillStyle = `rgba(255,255,255,${s.alpha})`
-        ctx.fill()
-      })
-      animId = requestAnimationFrame(animate)
-    }
-    animate()
-
-    const handleResize = () => {
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
-    }
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      cancelAnimationFrame(animId)
-      window.removeEventListener('resize', handleResize)
-    }
+    setStars(Array.from({ length: 60 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: Math.random() * 2 + 1,
+      opacity: Math.random() * 0.6 + 0.2,
+      duration: Math.random() * 3 + 2,
+    })))
   }, [])
-
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 pointer-events-none z-0"
-    />
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {stars.map(star => (
+        <div key={star.id} className="absolute rounded-full bg-white" style={{
+          left: `${star.x}%`, top: `${star.y}%`,
+          width: `${star.size}px`, height: `${star.size}px`,
+          opacity: star.opacity,
+          animation: `pulse ${star.duration}s ease-in-out infinite alternate`
+        }} />
+      ))}
+    </div>
   )
 }
 
-export default function SpinContent() {
-  const { slug } = useParams()
-  const searchParams = useSearchParams()
-  const wheelId = searchParams.get('wheel')
+// ─── Dessin roue ──────────────────────────────────────────────────────────────
+function drawEqualWheel(canvas, rewards, rotation = 0) {
+  if (!canvas || !rewards.length) return
+  const ctx = canvas.getContext('2d')
+  const { width, height } = canvas
+  const cx = width / 2
+  const cy = height / 2
+  const radius = Math.min(cx, cy) - 10
 
+  ctx.clearRect(0, 0, width, height)
+
+  const n = rewards.length
+  const sliceAngle = (2 * Math.PI) / n
+
+  rewards.forEach((reward, i) => {
+    const startAngle = rotation + i * sliceAngle
+    const endAngle = startAngle + sliceAngle
+
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.arc(cx, cy, radius, startAngle, endAngle)
+    ctx.closePath()
+    ctx.fillStyle = reward.color
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(startAngle + sliceAngle / 2)
+    ctx.textAlign = 'right'
+    ctx.fillStyle = '#fff'
+    ctx.font = `bold ${Math.max(10, Math.min(13, 200 / n))}px Sora, sans-serif`
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'
+    ctx.shadowBlur = 4
+    const text = reward.label.length > 14 ? reward.label.slice(0, 13) + '…' : reward.label
+    ctx.fillText(text, radius - 14, 5)
+    ctx.restore()
+  })
+
+  // Cercle central
+  ctx.beginPath()
+  ctx.arc(cx, cy, 18, 0, 2 * Math.PI)
+  ctx.fillStyle = '#1a0533'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(139,92,246,0.8)'
+  ctx.lineWidth = 3
+  ctx.stroke()
+}
+
+// ─── Footer légal ─────────────────────────────────────────────────────────────
+function LegalFooter() {
+  return (
+    <div className="relative z-10 pb-6 text-center">
+      <a href="/mentions-legales" className="text-xs text-gray-600 hover:text-gray-400 transition">
+        Mentions légales
+      </a>
+    </div>
+  )
+}
+
+// ─── Composant principal ──────────────────────────────────────────────────────
+export default function SpinContent({ slug }) {
+  const canvasRef = useRef(null)
+  const rotationRef = useRef(0)
+
+  // step: loading | ready | popup | spin | result | already | error
   const [step, setStep] = useState('loading')
   const [wheel, setWheel] = useState(null)
   const [token, setToken] = useState(null)
-  const [result, setResult] = useState(null)
   const [spinning, setSpinning] = useState(false)
-  const [rotation, setRotation] = useState(0)
-  const [showPopup, setShowPopup] = useState(false)
-  const canvasRef = useRef(null)
-  const storageKey = `spun_${wheelId}`
+  const [result, setResult] = useState(null)
+  const [hasReviewed, setHasReviewed] = useState(false)
 
+  const storageKey = `spinned_wheel_${slug}`
+
+  // ─── Dessiner la roue (appelé dès que canvas + wheel sont dispo) ────────────
+  const drawWheel = useCallback(() => {
+    if (wheel?.rewards && canvasRef.current) {
+      drawEqualWheel(canvasRef.current, wheel.rewards, rotationRef.current)
+    }
+  }, [wheel])
+
+  // Redessiner quand wheel change ou quand le canvas devient visible
   useEffect(() => {
-    if (!wheelId) { setStep('error'); return }
+    if (!wheel?.rewards) return
+    // Petit délai pour laisser le DOM se mettre à jour
+    const t = setTimeout(() => drawWheel(), 50)
+    return () => clearTimeout(t)
+  }, [wheel, step, drawWheel])
 
-    const alreadySpun = localStorage.getItem(storageKey)
-if (alreadySpun) {
-  try {
-    const data = JSON.parse(alreadySpun)
-    setResult(data)
-    setStep('already')
-  } catch(e) {
-    localStorage.removeItem(storageKey)
-  }
-  return
-}
+  // ─── Init ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!slug) return
 
-    axios.get(`http://localhost:3000/api/scan/${wheelId}`)
+    const params = new URLSearchParams(window.location.search)
+    const wId = params.get('wheel')
+    if (!wId) { setStep('error'); return }
+
+    const cached = localStorage.getItem(storageKey)
+    if (cached) {
+      try {
+        const data = JSON.parse(cached)
+        setResult(data)
+        setStep('already')
+        return
+      } catch (_) {}
+    }
+
+    const fingerprint = getFingerprint()
+
+    axios.get(`${API}/api/scan/${wId}`, {
+      headers: { 'x-fingerprint': fingerprint }
+    })
       .then(res => {
         setWheel(res.data.wheel)
         setToken(res.data.token)
-        setStep('review')
+
+        if (res.data.alreadyScanned && res.data.hasSpun) {
+          const s = res.data.existingScan
+          const data = { reward: s.reward, secretCode: s.secretCode, status: s.status }
+          setResult(data)
+          localStorage.setItem(storageKey, JSON.stringify(data))
+          setStep('already')
+        } else {
+          setStep('ready') // ← affiche la roue directement
+        }
       })
       .catch(() => setStep('error'))
-  }, [wheelId])
+  }, [slug])
 
-  useEffect(() => {
-    if (wheel && canvasRef.current && step === 'spin') drawWheel(rotation)
-  }, [wheel, rotation, step])
-
-  const drawWheel = (rot) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    const size = canvas.width
-    const center = size / 2
-    const radius = center - 10
-    const rewards = wheel.rewards
-    const total = rewards.reduce((s, r) => s + r.probability, 0)
-
-    ctx.clearRect(0, 0, size, size)
-
-    let startAngle = (rot * Math.PI) / 180
-
-    rewards.forEach((r) => {
-      const slice = (r.probability / total) * 2 * Math.PI
-
-      ctx.beginPath()
-      ctx.moveTo(center, center)
-      ctx.arc(center, center, radius, startAngle, startAngle + slice)
-      ctx.closePath()
-      ctx.fillStyle = r.color
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)'
-      ctx.lineWidth = 2
-      ctx.stroke()
-
-      ctx.save()
-      ctx.translate(center, center)
-      ctx.rotate(startAngle + slice / 2)
-      ctx.textAlign = 'right'
-      ctx.fillStyle = '#fff'
-      ctx.font = 'bold 12px Sora, sans-serif'
-      ctx.shadowColor = 'rgba(0,0,0,0.5)'
-      ctx.shadowBlur = 6
-      const text = r.label.length > 14 ? r.label.substring(0, 13) + '...' : r.label
-      ctx.fillText(text, radius - 12, 5)
-      ctx.restore()
-
-      startAngle += slice
-    })
-
-    ctx.beginPath()
-    ctx.arc(center, center, radius, 0, 2 * Math.PI)
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)'
-    ctx.lineWidth = 3
-    ctx.stroke()
-
-    ctx.beginPath()
-    ctx.arc(center, center, 22, 0, 2 * Math.PI)
-    ctx.fillStyle = '#1f1f2e'
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)'
-    ctx.lineWidth = 2
-    ctx.stroke()
-
-    ctx.font = '16px serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('🎡', center, center + 6)
+  // ─── Ouvrir Google Reviews ─────────────────────────────────────────────────
+  const handleOpenGoogle = () => {
+    if (wheel?.googleReviewUrl) {
+      window.open(wheel.googleReviewUrl, '_blank')
+    }
+    setHasReviewed(true)
+    setStep('popup') // montre le popup de confirmation
   }
 
+  // ─── Lancer le spin ────────────────────────────────────────────────────────
   const handleSpin = async () => {
-    if (spinning) return
+    if (spinning || !token) return
     setSpinning(true)
+    setStep('spin')
 
     try {
-      const res = await axios.post('http://localhost:3000/api/scan/spin', { token })
-      const { reward, dailyCode, wonAt } = res.data
+      const res = await axios.post(`${API}/api/scan/spin`, { token })
+      const { reward, secretCode, wonAt, date } = res.data
 
       const rewards = wheel.rewards
-      const total = rewards.reduce((s, r) => s + r.probability, 0)
-      let targetAngle = 0
-      let cumul = 0
+      const n = rewards.length
+      const sliceAngle = (2 * Math.PI) / n
+      const winnerIndex = rewards.findIndex(r => r.id === reward.id)
 
-      for (const r of rewards) {
-        const slice = (r.probability / total) * 360
-        if (r.id === reward.id) {
-          targetAngle = cumul + slice / 2
-          break
-        }
-        cumul += slice
-      }
+      const targetAngle = -(winnerIndex * sliceAngle + sliceAngle / 2) - Math.PI / 2
+      const spins = 6 * 2 * Math.PI
+      const startRot = rotationRef.current
+      const finalRotation = spins + targetAngle - (startRot % (2 * Math.PI))
 
-      const spinTurns = 5 * 360
-      const finalRotation = spinTurns + (360 - targetAngle)
-
+      const duration = 4500
       let start = null
-      const duration = 5000
-      const startRot = rotation
 
-      const animate = (timestamp) => {
+      function animate(timestamp) {
         if (!start) start = timestamp
         const elapsed = timestamp - start
         const progress = Math.min(elapsed / duration, 1)
-        const eased = 1 - Math.pow(1 - progress, 3)
+        const eased = 1 - Math.pow(1 - progress, 4)
         const current = startRot + finalRotation * eased
 
-        setRotation(current)
-        drawWheel(current)
+        rotationRef.current = current
+        drawEqualWheel(canvasRef.current, rewards, current)
 
         if (progress < 1) {
           requestAnimationFrame(animate)
         } else {
-          localStorage.setItem(storageKey, JSON.stringify({
-            reward,
-            dailyCode,
-            wonAt,
-            date: new Date().toLocaleDateString('fr-FR')
-          }))
-          setResult({ reward, dailyCode, wonAt, date: new Date().toLocaleDateString('fr-FR') })
+          const data = {
+            reward, secretCode, wonAt,
+            date: date || new Date().toLocaleDateString('fr-FR')
+          }
+          localStorage.setItem(storageKey, JSON.stringify(data))
+          setResult(data)
           setStep('result')
           setSpinning(false)
 
@@ -227,21 +244,19 @@ if (alreadySpun) {
 
       requestAnimationFrame(animate)
     } catch (err) {
-      if (err.response?.status === 400) {
-        setStep('already')
-      } else {
-        setStep('error')
-      }
+      setStep(err.response?.status === 400 ? 'already' : 'error')
       setSpinning(false)
     }
   }
 
+  // ─── Styles ────────────────────────────────────────────────────────────────
   const bgStyle = {
     background: 'radial-gradient(ellipse at top, #1a0533 0%, #0d0d1a 50%, #000000 100%)',
     fontFamily: "'Sora', sans-serif",
     minHeight: '100vh'
   }
 
+  // ─── Écrans statiques ──────────────────────────────────────────────────────
   if (step === 'loading') return (
     <div style={bgStyle} className="flex items-center justify-center">
       <StarBackground />
@@ -263,192 +278,167 @@ if (alreadySpun) {
     </div>
   )
 
-  if (step === 'already') return (
-    <div style={bgStyle} className="flex items-center justify-center p-4">
-      <StarBackground />
-      <div className="relative z-10 text-center w-full max-w-sm">
-        <p className="text-5xl mb-4">🎡</p>
-        <h1 className="text-white text-xl font-bold mb-2">Vous avez déjà participé</h1>
-        <p className="text-gray-400 text-sm mb-6">Voici votre récompense :</p>
-
-        {result && !result.reward?.isLosing ? (
-          <div>
-            <div className="rounded-2xl p-6 mb-4 border border-gray-700" style={{
-              background: 'rgba(255,255,255,0.05)',
-              backdropFilter: 'blur(10px)'
-            }}>
-              <div
-                className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl"
-                style={{ backgroundColor: result.reward?.color }}
-              >
-                🎁
-              </div>
-              <h2 className="text-white text-xl font-bold">{result.reward?.label}</h2>
-            </div>
-
-            <div className="rounded-xl p-4 mb-4 border border-violet-500/30" style={{
-              background: 'rgba(139, 92, 246, 0.1)'
-            }}>
-              <p className="text-gray-400 text-sm mb-2">Votre code de validation</p>
-              <p className="text-4xl font-bold text-violet-400 tracking-widest">{result.dailyCode}</p>
-              <p className="text-gray-500 text-xs mt-2">{result.wonAt} — {result.date}</p>
-            </div>
-
-            <p className="text-gray-500 text-sm">Montrez ce code au comptoir pour récupérer votre récompense</p>
-          </div>
-        ) : (
-          <div>
-            <p className="text-5xl mb-4">😢</p>
-            <p className="text-gray-400">Vous n'avez pas gagné cette fois</p>
-          </div>
-        )}
+  const ResultWon = ({ res }) => (
+    <div className="text-center">
+      <p className="text-6xl mb-4">🎉</p>
+      <h1 className="text-2xl font-bold text-white mb-2">Félicitations !</h1>
+      <p className="text-gray-400 mb-6">Vous avez gagné :</p>
+      <div className="rounded-2xl p-5 mb-5 border border-gray-700" style={{ background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
+        <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center text-2xl shadow-lg" style={{ backgroundColor: res.reward?.color }}>
+          🎁
+        </div>
+        <h2 className="text-white text-xl font-bold">{res.reward?.label}</h2>
       </div>
+      <div className="rounded-xl p-5 mb-4 border border-violet-500/30" style={{ background: 'rgba(139,92,246,0.1)', backdropFilter: 'blur(10px)' }}>
+        <p className="text-gray-400 text-sm mb-3">Présentez ce QR code au comptoir</p>
+        <div className="flex justify-center bg-white p-3 rounded-xl mb-3">
+          <QRCodeSVG value={res.secretCode || ''} size={160} bgColor="#ffffff" fgColor="#1a0533" level="H" />
+        </div>
+        <p className="text-violet-400 font-mono font-bold text-lg tracking-widest">{res.secretCode}</p>
+        <p className="text-gray-500 text-xs mt-2">Valable jusqu'à minuit aujourd'hui</p>
+      </div>
+      <p className="text-gray-500 text-sm">Le personnel scannera votre QR code pour valider la récompense</p>
     </div>
   )
 
+  if (step === 'already') return (
+    <div style={bgStyle} className="flex flex-col items-center justify-center p-4 min-h-screen">
+      <StarBackground />
+      <div className="relative z-10 text-center w-full max-w-sm flex-1 flex items-center justify-center">
+        {result && !result.reward?.isLosing && result.secretCode ? (
+          <ResultWon res={result} />
+        ) : (
+          <>
+            <p className="text-5xl mb-4">🎡</p>
+            <h1 className="text-white text-xl font-bold mb-2">Vous avez déjà participé</h1>
+            <p className="text-gray-400 text-sm">Vous avez déjà utilisé cette roue !</p>
+          </>
+        )}
+      </div>
+      <LegalFooter />
+    </div>
+  )
+
+  if (step === 'result') return (
+    <div style={bgStyle} className="flex flex-col items-center justify-center p-4 min-h-screen">
+      <StarBackground />
+      <div className="relative z-10 w-full max-w-sm flex-1 flex items-center justify-center">
+        {result?.reward?.isLosing ? (
+          <div className="text-center">
+            <p className="text-7xl mb-4 animate-bounce">😢</p>
+            <h1 className="text-2xl font-bold text-white mb-2">Pas de chance !</h1>
+            <p className="text-gray-400">Vous avez déjà utilisé cette roue !</p>
+          </div>
+        ) : (
+          <ResultWon res={result} />
+        )}
+      </div>
+      <LegalFooter />
+    </div>
+  )
+
+  // ─── Écran principal : roue toujours visible ───────────────────────────────
   return (
-    <div style={bgStyle} className="flex flex-col items-center justify-center p-4 relative">
+    <div style={bgStyle} className="flex flex-col items-center justify-center p-4 relative overflow-hidden">
       <StarBackground />
 
-      {showPopup && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      {/* Popup Google obligatoire */}
+      {step === 'popup' && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
-            <p className="text-4xl mb-4">⭐</p>
-            <h2 className="text-white font-bold text-xl mb-3">Laisser un avis Google</h2>
-            <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-              Vous allez être redirigé vers Google pour laisser votre avis. Revenez ensuite sur cette page pour tourner la roue et gagner votre récompense !
-            </p>
-            <a
-              href={wheel?.googleReviewUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setShowPopup(false)}
-              className="block w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3.5 rounded-xl transition mb-3"
-            >
-              ⭐ Aller sur Google
-            </a>
-            <button
-              onClick={() => setShowPopup(false)}
-              className="w-full text-gray-500 hover:text-gray-300 text-sm transition py-2"
-            >
-              Annuler
-            </button>
+            {hasReviewed ? (
+              <>
+                <p className="text-4xl mb-4">✅</p>
+                <h2 className="text-white font-bold text-xl mb-3">Merci pour votre avis !</h2>
+                <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                  Vous pouvez maintenant tourner la roue et tenter de gagner une récompense !
+                </p>
+                <button
+                  onClick={() => { setStep('spin'); setSpinning(false) }}
+                  className="block w-full text-white font-bold py-4 rounded-2xl transition mb-3"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)' }}
+                >
+                  🎰 Tourner la roue !
+                </button>
+                <button
+                  onClick={() => setStep('ready')}
+                  className="w-full text-gray-500 hover:text-gray-300 text-sm transition py-2"
+                >
+                  Retour
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-4xl mb-4">⭐</p>
+                <h2 className="text-white font-bold text-xl mb-3">Laisser un avis Google</h2>
+                <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                  Vous allez être redirigé vers Google. Une fois votre avis posté, revenez ici pour tourner la roue !
+                </p>
+                <button
+                  onClick={handleOpenGoogle}
+                  className="block w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3.5 rounded-xl transition mb-3"
+                >
+                  ⭐ Aller sur Google
+                </button>
+                <button onClick={() => setStep('ready')} className="w-full text-gray-500 hover:text-gray-300 text-sm transition py-2">
+                  Annuler
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      <div className="relative z-10 w-full max-w-sm">
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6 pb-10">
 
-        {step === 'review' && (
-          <div className="text-center">
-            <div className="mb-8">
-              <div className="w-20 h-20 bg-violet-600/20 border border-violet-500/30 rounded-full flex items-center justify-center text-4xl mx-auto mb-4">
-                🎡
-              </div>
-              <h1 className="text-2xl font-bold text-white">{wheel?.business?.name || 'Merci !'}</h1>
-              <p className="text-gray-400 mt-2 text-sm leading-relaxed">
-                Laissez-nous un avis Google et tentez de gagner une récompense !
-              </p>
-            </div>
+        {/* Nom du commerce */}
+        <h1 className="text-xl font-bold text-white text-center">
+          {wheel?.business?.name || wheel?.name}
+        </h1>
 
+        {/* Roue — toujours visible */}
+        <div className="relative">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-10 text-2xl">▼</div>
+          <canvas
+            ref={canvasRef}
+            width={300}
+            height={300}
+            className="rounded-full shadow-2xl"
+            style={{ boxShadow: '0 0 40px rgba(139,92,246,0.4)' }}
+          />
+        </div>
+
+        {/* Boutons selon l'étape */}
+        {step === 'ready' && (
+          <div className="w-full space-y-3">
+            <p className="text-gray-400 text-sm text-center leading-relaxed">
+              Laissez un avis Google pour débloquer la roue et tenter de gagner une récompense !
+            </p>
             <button
-              onClick={() => setShowPopup(true)}
-              className="block w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-4 rounded-2xl transition mb-4"
+              onClick={() => setStep('popup')}
+              className="block w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-4 rounded-2xl transition"
             >
               ⭐ Laisser un avis Google
             </button>
-
-            <button
-              onClick={() => setStep('spin')}
-              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold py-4 rounded-2xl transition"
-            >
-              🎰 J'ai laissé mon avis, je tourne !
-            </button>
-
-            <p className="text-gray-600 text-xs mt-4">En participant vous confirmez avoir laissé un avis sincère</p>
           </div>
         )}
 
         {step === 'spin' && (
-          <div className="text-center">
-            <h1 className="text-xl font-bold text-white mb-4">Tournez la roue !</h1>
-
-            <div className="flex justify-center mb-1">
-              <div className="text-2xl text-violet-400 drop-shadow-lg">▼</div>
-            </div>
-
-            <div className="flex justify-center mb-6 relative">
-              <div className="absolute rounded-full" style={{
-                width: '300px',
-                height: '300px',
-                boxShadow: '0 0 60px rgba(139, 92, 246, 0.4)'
-              }} />
-              <canvas
-                ref={canvasRef}
-                width={300}
-                height={300}
-                className="relative z-10"
-                style={{ borderRadius: '50%' }}
-              />
-            </div>
-
-            <button
-              onClick={handleSpin}
-              disabled={spinning}
-              className="w-full font-bold py-4 rounded-2xl transition text-lg disabled:opacity-50 text-white"
-              style={{
-                background: spinning ? '#4c1d95' : 'linear-gradient(135deg, #7c3aed, #ec4899)',
-                boxShadow: spinning ? 'none' : '0 0 30px rgba(139, 92, 246, 0.5)'
-              }}
-            >
-              {spinning ? '🎡 La roue tourne...' : '🎰 TOURNER !'}
-            </button>
-          </div>
-        )}
-
-        {step === 'result' && result && (
-          <div className="text-center">
-            {result.reward.isLosing ? (
-              <div>
-                <p className="text-7xl mb-4 animate-bounce">😢</p>
-                <h1 className="text-2xl font-bold text-white mb-2">Pas de chance !</h1>
-                <p className="text-gray-400">Revenez demain pour une nouvelle tentative</p>
-              </div>
-            ) : (
-              <div>
-                <p className="text-6xl mb-4">🎉</p>
-                <h1 className="text-2xl font-bold text-white mb-2">Félicitations !</h1>
-                <p className="text-gray-400 mb-6">Vous avez gagné :</p>
-
-                <div className="rounded-2xl p-6 mb-6 border border-gray-700" style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  backdropFilter: 'blur(10px)'
-                }}>
-                  <div
-                    className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl shadow-lg"
-                    style={{ backgroundColor: result.reward.color }}
-                  >
-                    🎁
-                  </div>
-                  <h2 className="text-white text-xl font-bold">{result.reward.label}</h2>
-                </div>
-
-                <div className="rounded-xl p-4 mb-4 border border-violet-500/30" style={{
-                  background: 'rgba(139, 92, 246, 0.1)',
-                  backdropFilter: 'blur(10px)'
-                }}>
-                  <p className="text-gray-400 text-sm mb-2">Votre code de validation</p>
-                  <p className="text-4xl font-bold text-violet-400 tracking-widest">{result.dailyCode}</p>
-                  <p className="text-gray-500 text-xs mt-2">{result.wonAt} — {result.date}</p>
-                </div>
-
-                <p className="text-gray-500 text-sm">Montrez ce code au comptoir pour récupérer votre récompense</p>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={handleSpin}
+            disabled={spinning}
+            className="w-full py-4 rounded-2xl font-bold text-white text-lg transition disabled:opacity-50"
+            style={{
+              background: spinning ? '#4c1d95' : 'linear-gradient(135deg, #7c3aed, #ec4899)',
+              boxShadow: spinning ? 'none' : '0 0 30px rgba(139,92,246,0.5)'
+            }}
+          >
+            {spinning ? '🎡 La roue tourne...' : '🎰 TOURNER !'}
+          </button>
         )}
 
       </div>
+      <LegalFooter />
     </div>
   )
 }

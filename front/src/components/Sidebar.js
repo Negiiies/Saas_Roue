@@ -30,7 +30,6 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-2">
-        {/* Toggle dark/light */}
         <button
           onClick={toggle}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
@@ -38,7 +37,6 @@ export default function Sidebar() {
           <span>{dark ? '☀️' : '🌙'}</span>
           {dark ? 'Mode clair' : 'Mode sombre'}
         </button>
-
         <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 transition"

@@ -8,38 +8,48 @@ datasource db {
 }
 
 model Company {
-  id        Int        @id @default(autoincrement())
-  name      String
-  email     String     @unique
-  password  String
-  createdAt DateTime   @default(now())
-  businesses Business[]
+  id          Int        @id @default(autoincrement())
+  name        String
+  email       String     @unique
+  password    String
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  businesses  Business[]
 }
 
 model Business {
-  id        Int      @id @default(autoincrement())
-  name      String
-  slug      String   @unique
-  city      String?
-  zipCode   String?
-  status    String   @default("active")
-  companyId Int
-  company   Company  @relation(fields: [companyId], references: [id])
-  createdAt DateTime @default(now())
-  wheels    Wheel[]
+  id               Int       @id @default(autoincrement())
+  name             String
+  slug             String    @unique
+  city             String?
+  zipCode          String?
+  status           String    @default("trial")
+  trialEndsAt      DateTime?
+  companyId        Int
+  company          Company   @relation(fields: [companyId], references: [id])
+  createdAt        DateTime  @default(now())
+  
+  // Engagement
+  hasEngagement    Boolean   @default(false)
+  engagementStart  DateTime?
+  engagementMonths Int       @default(12)
+  autoRenew        Boolean   @default(false)
+  engagementStatus String    @default("none")
+
+  wheels           Wheel[]
 }
 
 model Wheel {
-  id               Int       @id @default(autoincrement())
-  name             String
-  googleReviewUrl  String?
-  codeSecret       String    @default("")
-  businessId       Int
-  business         Business  @relation(fields: [businessId], references: [id])
-  createdAt        DateTime  @default(now())
-  rewards          Reward[]
-  scans            Scan[]
+  id              Int      @id @default(autoincrement())
+  name            String
+  googleReviewUrl String?
+  businessId      Int
+  business        Business @relation(fields: [businessId], references: [id])
+  createdAt       DateTime @default(now())
+  rewards         Reward[]
+  scans           Scan[]
 }
+
 model Reward {
   id          Int      @id @default(autoincrement())
   label       String
@@ -49,16 +59,23 @@ model Reward {
   isLosing    Boolean  @default(false)
   wheelId     Int
   wheel       Wheel    @relation(fields: [wheelId], references: [id])
+  scans       Scan[]
 }
+
 model Scan {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  ip        String
-  hasSpun   Boolean  @default(false)
-  dailyCode Int?
-  wonAt     DateTime?
-  rewardId  Int?
-  wheelId   Int
-  wheel     Wheel    @relation(fields: [wheelId], references: [id])
-  createdAt DateTime @default(now())
+  id          Int       @id @default(autoincrement())
+  token       String    @unique
+  secretCode  String?   @unique
+  ip          String
+  fingerprint String?   // fingerprint unique de l'appareil
+  hasSpun     Boolean   @default(false)
+  rewardId    Int?
+  reward      Reward?   @relation(fields: [rewardId], references: [id])
+  wheelId     Int
+  wheel       Wheel     @relation(fields: [wheelId], references: [id])
+  status      String    @default("pending") // pending | won | lost | used | expired
+  wonAt       DateTime?
+  usedAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
 }
