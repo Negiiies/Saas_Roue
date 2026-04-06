@@ -28,13 +28,13 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: "Période d'essai expirée" }, { status: 403 })
     }
 
-    const existingScan = await prisma.scan.findFirst({
-      where: {
-        wheelId,
-        ...(fingerprint ? { fingerprint } : { ip })
-      },
-      include: { reward: true }
-    })
+    // Anti-triche : chercher par fingerprint uniquement (l'IP est partagée sur un même WiFi)
+    const existingScan = fingerprint
+      ? await prisma.scan.findFirst({
+          where: { wheelId, fingerprint },
+          include: { reward: true }
+        })
+      : null
 
     if (existingScan) {
       return NextResponse.json({
