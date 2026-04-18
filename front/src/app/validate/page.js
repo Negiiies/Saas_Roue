@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import jsQR from 'jsqr'
 
 const API = ''
 
@@ -35,10 +36,6 @@ export default function ValidatePage() {
   }
 
   const startScanner = async () => {
-    if (!('BarcodeDetector' in window)) {
-      setResult({ valid: false, error: "Scan non supporté sur ce navigateur. Utilisez Chrome ou saisissez le code manuellement." })
-      return
-    }
     setScanning(true)
     setResult(null)
     try {
@@ -48,19 +45,22 @@ export default function ValidatePage() {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
       }
-      const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-      intervalRef.current = setInterval(async () => {
-        if (!videoRef.current || !streamRef.current) return
-        try {
-          const barcodes = await detector.detect(videoRef.current)
-          if (barcodes.length > 0) {
-            const scannedCode = barcodes[0].rawValue
-            stopScanner()
-            setCode(scannedCode)
-            handleValidate(scannedCode)
-          }
-        } catch (_) {}
-      }, 500)
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      intervalRef.current = setInterval(() => {
+        const video = videoRef.current
+        if (!video || !streamRef.current || video.readyState !== video.HAVE_ENOUGH_DATA) return
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const code = jsQR(imageData.data, imageData.width, imageData.height)
+        if (code?.data) {
+          stopScanner()
+          setCode(code.data)
+          handleValidate(code.data)
+        }
+      }, 300)
     } catch (err) {
       setScanning(false)
       const msg = err.name === 'NotAllowedError'
