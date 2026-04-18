@@ -250,13 +250,42 @@ export default function BusinessPage() {
     })
   }
 
-  const downloadQR = () => {
-    const svg = document.querySelector('#qr-download svg')
-    const svgData = new XMLSerializer().serializeToString(svg)
-    const blob = new Blob([svgData], { type: 'image/svg+xml' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `qr-${business?.slug}.svg`; a.click()
-    URL.revokeObjectURL(url)
+  const downloadQR = (format = 'svg') => {
+    const svgEl = document.querySelector('#qr-download svg')
+    if (!svgEl) return
+    const size = 200
+    const pad = 20
+    const total = size + pad * 2
+    const name = `qr-${business?.slug}`
+
+    if (format === 'svg') {
+      const root = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      root.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+      root.setAttribute('width', total); root.setAttribute('height', total)
+      root.setAttribute('viewBox', `0 0 ${total} ${total}`)
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+      bg.setAttribute('width', total); bg.setAttribute('height', total); bg.setAttribute('fill', 'white')
+      const inner = svgEl.cloneNode(true)
+      inner.setAttribute('x', pad); inner.setAttribute('y', pad)
+      inner.setAttribute('width', size); inner.setAttribute('height', size)
+      root.appendChild(bg); root.appendChild(inner)
+      const blob = new Blob([root.outerHTML], { type: 'image/svg+xml' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${name}.svg`; a.click()
+    } else {
+      const canvas = document.createElement('canvas')
+      canvas.width = total; canvas.height = total
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = 'white'; ctx.fillRect(0, 0, total, total)
+      const svgData = new XMLSerializer().serializeToString(svgEl)
+      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+      const img = new Image()
+      img.onload = () => {
+        ctx.drawImage(img, pad, pad, size, size)
+        const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = `${name}.png`; a.click()
+        URL.revokeObjectURL(img.src)
+      }
+      img.src = URL.createObjectURL(blob)
+    }
   }
 
   if (loading) return <div className="text-gray-400">Chargement...</div>
@@ -476,7 +505,10 @@ export default function BusinessPage() {
               <QRCodeSVG value={`${window.location.origin}/spin/${business?.slug}?wheel=${qrWheel.id}`} size={200} bgColor="#ffffff" fgColor="#000000" level="H" />
             </div>
             <p className="text-center text-gray-400 text-xs mt-4">Scanne ce QR code pour accéder à la roue</p>
-            <button onClick={downloadQR} className="w-full mt-4 bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 rounded-xl transition">⬇️ Télécharger le QR Code</button>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => downloadQR('png')} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 rounded-xl transition">⬇️ PNG</button>
+              <button onClick={() => downloadQR('svg')} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 rounded-xl transition">⬇️ SVG</button>
+            </div>
           </div>
         </div>
       )}
