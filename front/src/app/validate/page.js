@@ -13,6 +13,7 @@ export default function ValidatePage() {
   const [mounted, setMounted] = useState(false)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const intervalRef = useRef(null)
 
   useEffect(() => {
     setMounted(true)
@@ -34,6 +35,10 @@ export default function ValidatePage() {
   }
 
   const startScanner = async () => {
+    if (!('BarcodeDetector' in window)) {
+      setResult({ valid: false, error: "Scan non supporté sur ce navigateur. Utilisez Chrome ou saisissez le code manuellement." })
+      return
+    }
     setScanning(true)
     setResult(null)
     try {
@@ -41,21 +46,15 @@ export default function ValidatePage() {
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        videoRef.current.play()
-      }
-      if (!('BarcodeDetector' in window)) {
-        stopScanner()
-        setResult({ valid: false, error: "Scan non supporté sur ce navigateur. Utilisez Chrome ou saisissez le code manuellement." })
-        return
+        await videoRef.current.play()
       }
       const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-      const interval = setInterval(async () => {
-        if (!videoRef.current) return
+      intervalRef.current = setInterval(async () => {
+        if (!videoRef.current || !streamRef.current) return
         try {
           const barcodes = await detector.detect(videoRef.current)
           if (barcodes.length > 0) {
             const scannedCode = barcodes[0].rawValue
-            clearInterval(interval)
             stopScanner()
             setCode(scannedCode)
             handleValidate(scannedCode)
@@ -64,11 +63,20 @@ export default function ValidatePage() {
       }, 500)
     } catch (err) {
       setScanning(false)
-      setResult({ valid: false, error: "Impossible d'accéder à la caméra (HTTPS requis)" })
+      const msg = err.name === 'NotAllowedError'
+        ? "Accès caméra refusé. Autorisez la caméra dans les paramètres du navigateur."
+        : err.name === 'NotFoundError'
+        ? "Aucune caméra détectée sur cet appareil."
+        : "Impossible d'accéder à la caméra (HTTPS requis)"
+      setResult({ valid: false, error: msg })
     }
   }
 
   const stopScanner = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
@@ -422,21 +430,19 @@ export default function ValidatePage() {
             </div>
           )}
 
-          {scanning && (
-            <>
-              <div className="scanner-wrapper">
-                <video ref={videoRef} playsInline muted />
-                <div className="scanner-overlay">
-                  <div className="scan-corner tl" />
-                  <div className="scan-corner tr" />
-                  <div className="scan-corner bl" />
-                  <div className="scan-corner br" />
-                  <div className="scan-line" />
-                </div>
+          <div style={{ display: scanning ? 'block' : 'none' }}>
+            <div className="scanner-wrapper">
+              <video ref={videoRef} playsInline muted />
+              <div className="scanner-overlay">
+                <div className="scan-corner tl" />
+                <div className="scan-corner tr" />
+                <div className="scan-corner bl" />
+                <div className="scan-corner br" />
+                <div className="scan-line" />
               </div>
-              <button className="btn-reset" onClick={stopScanner}>Annuler le scan</button>
-            </>
-          )}
+            </div>
+            <button className="btn-reset" onClick={stopScanner}>Annuler le scan</button>
+          </div>
 
           {!result && !scanning && (
             <>
