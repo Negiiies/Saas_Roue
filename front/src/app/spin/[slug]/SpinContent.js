@@ -279,6 +279,56 @@ export default function SpinContent({ slug }) {
     </div>
   )
 
+  const qrRef = useRef(null)
+
+  const downloadQR = (format) => {
+    const svgEl = qrRef.current?.querySelector('svg')
+    if (!svgEl) return
+    const size = 200
+    const pad = 20
+    const total = size + pad * 2
+
+    if (format === 'svg') {
+      const clone = svgEl.cloneNode(true)
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+      clone.setAttribute('width', total)
+      clone.setAttribute('height', total)
+      clone.setAttribute('viewBox', `0 0 ${total} ${total}`)
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+      bg.setAttribute('width', total); bg.setAttribute('height', total); bg.setAttribute('fill', 'white')
+      const inner = svgEl.cloneNode(true)
+      inner.setAttribute('x', pad); inner.setAttribute('y', pad)
+      inner.setAttribute('width', size); inner.setAttribute('height', size)
+      const root = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      root.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+      root.setAttribute('width', total); root.setAttribute('height', total)
+      root.setAttribute('viewBox', `0 0 ${total} ${total}`)
+      root.appendChild(bg); root.appendChild(inner)
+      const blob = new Blob([root.outerHTML], { type: 'image/svg+xml' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = 'qrcode.svg'
+      a.click()
+    } else {
+      const canvas = document.createElement('canvas')
+      canvas.width = total; canvas.height = total
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = 'white'
+      ctx.fillRect(0, 0, total, total)
+      const svgData = new XMLSerializer().serializeToString(svgEl)
+      const img = new Image()
+      img.onload = () => {
+        ctx.drawImage(img, pad, pad, size, size)
+        const a = document.createElement('a')
+        a.href = canvas.toDataURL('image/png')
+        a.download = 'qrcode.png'
+        a.click()
+      }
+      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+      img.src = URL.createObjectURL(blob)
+    }
+  }
+
   const ResultWon = ({ res }) => (
     <div className="text-center">
       <p className="text-6xl mb-4">🎉</p>
@@ -292,11 +342,19 @@ export default function SpinContent({ slug }) {
       </div>
       <div className="rounded-xl p-5 mb-4 border border-violet-500/30" style={{ background: 'rgba(139,92,246,0.1)', backdropFilter: 'blur(10px)' }}>
         <p className="text-gray-400 text-sm mb-3">Présentez ce QR code au comptoir</p>
-        <div className="flex justify-center bg-white p-3 rounded-xl mb-3">
+        <div ref={qrRef} className="flex justify-center bg-white p-3 rounded-xl mb-3">
           <QRCodeSVG value={res.secretCode || ''} size={160} bgColor="#ffffff" fgColor="#1a0533" level="H" />
         </div>
         <p className="text-violet-400 font-mono font-bold text-lg tracking-widest">{res.secretCode}</p>
         <p className="text-gray-500 text-xs mt-2">Valable 24h après obtention</p>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+          <button onClick={() => downloadQR('png')} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(139,92,246,0.15)', color: '#c4b5fd', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+            ↓ PNG
+          </button>
+          <button onClick={() => downloadQR('svg')} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(139,92,246,0.15)', color: '#c4b5fd', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+            ↓ SVG
+          </button>
+        </div>
       </div>
       <p className="text-gray-500 text-sm">Le personnel scannera votre QR code pour valider la récompense</p>
     </div>
